@@ -1,15 +1,12 @@
 {
   "name": "resell-buddy-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
-  "main": "index.js",
-  "engines": {
-    "node": ">=20"
-  },
+  "main": "bot.mjs",
+  "engines": { "node": ">=20" },
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
+    "start": "node bot.mjs"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
