@@ -8,9 +8,7 @@ import "dotenv/config";
 const token = process.env.DISCORD_BOT_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const GUILD_ID = process.env.DISCORD_GUILD_ID || "";
-const WHOP = process.env.WHOP_PRODUCT_URL || "https://whop.com/resell-buddy";
-const PRO = process.env.WHOP_CHECKOUT_PRO || "https://whop.com/checkout/plan_vAO3R1lqZ11UT";
-const ELITE = process.env.WHOP_CHECKOUT_ELITE || "https://whop.com/checkout/plan_3aG0H3FQibNZ4";
+const WHOP = process.env.WHOP_CHECKOUT || "https://whop.com/checkout/plan_vAO3R1lqZ11UT";
 const COL = { b: 0x5865f2, ok: 0x22c55e, w: 0xf59e0b, e: 0xef4444 };
 
 if (!token || !clientId) { console.error("Missing env"); process.exit(1); }
@@ -54,6 +52,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const commands = [
   new SlashCommandBuilder().setName("start").setDescription("Start here"),
   new SlashCommandBuilder().setName("help").setDescription("Simple guide"),
+  new SlashCommandBuilder().setName("howto").setDescription("How to use Resell Buddy"),
   new SlashCommandBuilder().setName("status").setDescription("Your plan and monitors"),
   new SlashCommandBuilder().setName("monitor").setDescription("Watch keywords")
     .addStringOption(o => o.setName("query").setDescription("e.g. nike dunk 42"))
@@ -69,7 +68,7 @@ const commands = [
       .addChannelTypes(ChannelType.GuildText).setRequired(true)),
   new SlashCommandBuilder().setName("demoalert").setDescription("Sample deal"),
   new SlashCommandBuilder().setName("ping").setDescription("Bot online?"),
-  new SlashCommandBuilder().setName("subscribe").setDescription("Paid plans"),
+  new SlashCommandBuilder().setName("subscribe").setDescription("Get access 22.99 EUR/mo"),
   new SlashCommandBuilder().setName("link").setDescription("Unlock free access"),
   new SlashCommandBuilder().setName("claimowner").setDescription("Unlimited test"),
   new SlashCommandBuilder().setName("setup").setDescription("Same as /start"),
@@ -93,7 +92,7 @@ async function home(i) {
   ].join("\n");
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("rb:stat").setLabel("My status").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setLabel("Subscribe").setStyle(ButtonStyle.Link).setURL(WHOP)
+    new ButtonBuilder().setLabel("Get access 22.99").setStyle(ButtonStyle.Link).setURL(WHOP)
   );
   await i.editReply({ embeds: [emb("Welcome to Resell Buddy", body)], components: [btns(), row2] });
 }
@@ -116,7 +115,7 @@ client.on(Events.InteractionCreate, async (i) => {
         return;
       }
       if (i.customId === "rb:how") {
-        await i.editReply({ embeds: [emb("How it works", "1. Unlock free access\n2. /alerts — channel\n3. /monitor query:nike dunk 42\n4. /demoalert\n\nLive scanning comes next. /subscribe for paid plans.")] });
+        await i.editReply({ embeds: [emb("How it works", "1. Unlock free access\n2. /alerts — channel\n3. /monitor query:nike dunk 42\n4. /demoalert\n\nPaid plan is 22.99 EUR/mo. /subscribe")] });
         return;
       }
       if (i.customId === "rb:stat") {
@@ -141,9 +140,9 @@ client.on(Events.InteractionCreate, async (i) => {
       await i.editReply({ embeds: [emb("Online", "Latency **" + client.ws.ping + "ms**", COL.ok)] });
       return;
     }
-    if (n === "help") {
+    if (n === "help" || n === "howto") {
       await i.editReply({
-        embeds: [emb("Commands", "/start — home\n/alerts — channel\n/monitor query:...\n/monitor action:List\n/demoalert\n/status\n/subscribe\n/ping\n\n" + next(u))],
+        embeds: [emb("How to use Resell Buddy", "1. /start — tap Unlock free access\n2. /alerts — pick the deals channel\n3. /monitor query:nike dunk 42\n4. /demoalert — sample deal\n5. /status — check setup\n\n/subscribe — 22.99 EUR/month\n\n" + next(u))],
         components: [btns()],
       });
       return;
@@ -238,11 +237,9 @@ client.on(Events.InteractionCreate, async (i) => {
     }
     if (n === "subscribe") {
       await i.editReply({
-        embeds: [emb("Paid plans", "Test free with Unlimited test on /start.\n\nPro 14.99/mo · Elite 29.99/mo")],
+        embeds: [emb("Get access", "One plan: 22.99 EUR per month.\nFull access. Cancel anytime.")],
         components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setLabel("Pro").setStyle(ButtonStyle.Link).setURL(PRO),
-          new ButtonBuilder().setLabel("Elite").setStyle(ButtonStyle.Link).setURL(ELITE),
-          new ButtonBuilder().setLabel("All plans").setStyle(ButtonStyle.Link).setURL(WHOP)
+          new ButtonBuilder().setLabel("Pay 22.99 EUR/mo").setStyle(ButtonStyle.Link).setURL(WHOP)
         )],
       });
       return;
