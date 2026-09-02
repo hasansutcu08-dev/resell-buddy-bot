@@ -1,267 +1,160 @@
 import {
-  Client, GatewayIntentBits, Events, REST, Routes,
-  SlashCommandBuilder, EmbedBuilder, ActionRowBuilder,
-  ButtonBuilder, ButtonStyle, ChannelType,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Client,
+  EmbedBuilder,
+  Events,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  SlashCommandBuilder,
 } from "discord.js";
 import "dotenv/config";
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
-const GUILD_ID = process.env.DISCORD_GUILD_ID || "";
-const WHOP = process.env.WHOP_CHECKOUT || "https://whop.com/checkout/plan_vAO3R1lqZ11UT";
-const COL = { b: 0x5865f2, ok: 0x22c55e, w: 0xf59e0b, e: 0xef4444 };
+const guildId = process.env.DISCORD_GUILD_ID || "";
+const checkoutUrl =
+  process.env.WHOP_CHECKOUT ||
+  "https://whop.com/checkout/plan_vAO3R1lqZ11UT/";
+const dashboardUrl = (
+  process.env.RESELL_BUDDY_URL ||
+  "https://resell-buddy-bot-production.up.railway.app"
+).replace(/\/$/, "");
+const colors = { primary: 0x5865f2, success: 0x22c55e };
 
-if (!token || !clientId) { console.error("Missing env"); process.exit(1); }
+if (!token || !clientId) {
+  console.error("Missing DISCORD_BOT_TOKEN or DISCORD_CLIENT_ID");
+  process.exit(1);
+}
 
-const owners = new Set((process.env.OWNER_DISCORD_IDS || "").split(",").map(s => s.trim()).filter(Boolean));
-const users = new Map();
+function embed(title, description, color = colors.primary) {
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setDescription(description)
+    .setFooter({ text: "Resell Buddy" });
+}
 
-function user(id) {
-  let u = users.get(id);
-  if (!u) {
-    const o = owners.has(id);
-    u = { linked: o, plan: o ? "owner" : "free", monitors: [], alert: null };
-    users.set(id, u);
-  }
-  return u;
-}
-function plan(p) {
-  if (p === "owner" || p === "elite") return { max: 999, name: p === "owner" ? "Owner (test)" : "Elite", c: COL.w };
-  if (p === "pro") return { max: 10, name: "Pro", c: COL.b };
-  return { max: 3, name: "Free", c: COL.ok };
-}
-function emb(t, d, c = COL.b) {
-  return new EmbedBuilder().setColor(c).setTitle(t).setDescription(d).setFooter({ text: "Resell Buddy" });
-}
-function btns() {
+function accessButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("rb:go").setLabel("Unlock free access").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("rb:max").setLabel("Unlimited test").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("rb:how").setLabel("How it works").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder()
+      .setLabel("Subscribe · €22.99/month")
+      .setStyle(ButtonStyle.Link)
+      .setURL(checkoutUrl),
+    new ButtonBuilder()
+      .setLabel("Open dashboard")
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${dashboardUrl}/dashboard`),
+    new ButtonBuilder()
+      .setLabel("Setup guide")
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${dashboardUrl}/guide`),
   );
 }
-function next(u) {
-  if (!u.linked) return "Next: tap Unlock free access";
-  if (!u.alert) return "Next: /alerts — pick a channel";
-  if (!u.monitors.length) return "Next: /monitor query:nike dunk 42";
-  return "Next: /demoalert or /status";
-}
-
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const commands = [
   new SlashCommandBuilder().setName("start").setDescription("Start here"),
-  new SlashCommandBuilder().setName("help").setDescription("Simple guide"),
-  new SlashCommandBuilder().setName("howto").setDescription("How to use Resell Buddy"),
-  new SlashCommandBuilder().setName("status").setDescription("Your plan and monitors"),
-  new SlashCommandBuilder().setName("monitor").setDescription("Watch keywords")
-    .addStringOption(o => o.setName("query").setDescription("e.g. nike dunk 42"))
-    .addStringOption(o => o.setName("action").setDescription("list/pause/resume/delete")
-      .addChoices(
-        { name: "List", value: "list" },
-        { name: "Pause", value: "pause" },
-        { name: "Resume", value: "resume" },
-        { name: "Delete", value: "delete" }))
-    .addStringOption(o => o.setName("id").setDescription("Monitor ID")),
-  new SlashCommandBuilder().setName("alerts").setDescription("Where deals post")
-    .addChannelOption(o => o.setName("channel").setDescription("Channel")
-      .addChannelTypes(ChannelType.GuildText).setRequired(true)),
-  new SlashCommandBuilder().setName("demoalert").setDescription("Sample deal"),
-  new SlashCommandBuilder().setName("ping").setDescription("Bot online?"),
-  new SlashCommandBuilder().setName("subscribe").setDescription("Get access 22.99 EUR/mo"),
-  new SlashCommandBuilder().setName("link").setDescription("Unlock free access"),
-  new SlashCommandBuilder().setName("claimowner").setDescription("Unlimited test"),
-  new SlashCommandBuilder().setName("setup").setDescription("Same as /start"),
-].map(c => c.toJSON());
+  new SlashCommandBuilder()
+    .setName("setup")
+    .setDescription("Open Resell Buddy setup"),
+  new SlashCommandBuilder().setName("help").setDescription("Resell Buddy guide"),
+  new SlashCommandBuilder()
+    .setName("howto")
+    .setDescription("How to use Resell Buddy"),
+  new SlashCommandBuilder()
+    .setName("status")
+    .setDescription("View your membership status"),
+  new SlashCommandBuilder()
+    .setName("subscribe")
+    .setDescription("Subscribe for €22.99/month"),
+  new SlashCommandBuilder()
+    .setName("ping")
+    .setDescription("Check whether the bot is online"),
+].map((command) => command.toJSON());
 
-async function home(i) {
-  const u = user(i.user.id);
-  const p = plan(u.plan);
-  const body = [
-    "Get deal alerts in Discord. Testing is free.",
-    "",
-    "**Plan:** " + p.name,
-    "**Monitors:** " + u.monitors.length + (p.max === 999 ? "" : " / " + p.max),
-    "**Alerts:** " + (u.alert ? "<#" + u.alert + ">" : "not set"),
-    "",
-    "**Once:**",
-    "1. Tap Unlock free access",
-    "2. /alerts — choose channel",
-    "3. /monitor query:nike dunk 42",
-    "4. /demoalert",
-  ].join("\n");
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("rb:stat").setLabel("My status").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setLabel("Get access 22.99").setStyle(ButtonStyle.Link).setURL(WHOP)
-  );
-  await i.editReply({ embeds: [emb("Welcome to Resell Buddy", body)], components: [btns(), row2] });
-}
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-client.on(Events.InteractionCreate, async (i) => {
-  if (i.isButton() && i.customId.startsWith("rb:")) {
-    try { await i.deferReply({ ephemeral: true }); } catch { return; }
-    const u = user(i.user.id);
-    try {
-      if (i.customId === "rb:go") {
-        u.linked = true;
-        if (owners.has(i.user.id)) u.plan = "owner";
-        await i.editReply({ embeds: [emb("You're in", "Plan: **" + plan(u.plan).name + "**\n\nNext: /alerts then /monitor query:...", COL.ok)] });
-        return;
-      }
-      if (i.customId === "rb:max") {
-        owners.add(i.user.id);
-        u.linked = true; u.plan = "owner";
-        await i.editReply({ embeds: [emb("Unlimited test", "No limits. Next: /alerts then /monitor.", COL.w)] });
-        return;
-      }
-      if (i.customId === "rb:how") {
-        await i.editReply({ embeds: [emb("How it works", "1. Unlock free access\n2. /alerts — channel\n3. /monitor query:nike dunk 42\n4. /demoalert\n\nPaid plan is 22.99 EUR/mo. /subscribe")] });
-        return;
-      }
-      if (i.customId === "rb:stat") {
-        const p = plan(u.plan);
-        await i.editReply({ embeds: [emb("Status", "**Plan:** " + p.name + "\n**Monitors:** " + u.monitors.length + "\n**Alerts:** " + (u.alert ? "<#" + u.alert + ">" : "not set") + "\n\n" + next(u), p.c)] });
-        return;
-      }
-    } catch (e) { console.error(e); try { await i.editReply({ content: "Error — try /start" }); } catch {} }
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  try {
+    await interaction.deferReply({ ephemeral: true });
+  } catch {
     return;
   }
 
-  if (!i.isChatInputCommand()) return;
-  console.log("[ix] /" + i.commandName);
-  try { await i.deferReply({ ephemeral: true }); } catch { return; }
-
   try {
-    const n = i.commandName;
-    const u = user(i.user.id);
+    if (interaction.commandName === "ping") {
+      await interaction.editReply({
+        embeds: [
+          embed(
+            "Resell Buddy is online",
+            `Discord latency: **${client.ws.ping}ms**`,
+            colors.success,
+          ),
+        ],
+      });
+      return;
+    }
 
-    if (n === "start" || n === "setup") { await home(i); return; }
-    if (n === "ping") {
-      await i.editReply({ embeds: [emb("Online", "Latency **" + client.ws.ping + "ms**", COL.ok)] });
-      return;
-    }
-    if (n === "help" || n === "howto") {
-      await i.editReply({
-        embeds: [emb("How to use Resell Buddy", "1. /start — tap Unlock free access\n2. /alerts — pick the deals channel\n3. /monitor query:nike dunk 42\n4. /demoalert — sample deal\n5. /status — check setup\n\n/subscribe — 22.99 EUR/month\n\n" + next(u))],
-        components: [btns()],
+    if (interaction.commandName === "status") {
+      await interaction.editReply({
+        embeds: [
+          embed(
+            "Membership status",
+            "Open the Resell Buddy dashboard to view your current Premium access. An active subscription is required to run monitors, Price Watches, and member commands.",
+          ),
+        ],
+        components: [accessButtons()],
       });
       return;
     }
-    if (n === "link") {
-      u.linked = true;
-      if (owners.has(i.user.id)) u.plan = "owner";
-      await i.editReply({ embeds: [emb("Unlocked", "Plan **" + plan(u.plan).name + "**. Next: /alerts", COL.ok)] });
-      return;
-    }
-    if (n === "claimowner") {
-      owners.add(i.user.id); u.linked = true; u.plan = "owner";
-      await i.editReply({ embeds: [emb("Unlimited test", "No limits. Next: /alerts", COL.w)] });
-      return;
-    }
-    if (n === "status") {
-      const p = plan(u.plan);
-      await i.editReply({
-        embeds: [emb("Status", "**Plan:** " + p.name + "\n**Monitors:** " + u.monitors.length + "\n**Alerts:** " + (u.alert ? "<#" + u.alert + ">" : "not set") + "\n\n" + next(u), p.c)],
-        components: [btns()],
+
+    if (interaction.commandName === "subscribe") {
+      await interaction.editReply({
+        embeds: [
+          embed(
+            "Resell Buddy Premium",
+            "**€22.99 per month** plus applicable tax. Premium includes up to 50 active monitors, managed proxy access, Discord and Telegram delivery, and the full dashboard. Cancel anytime through Whop.",
+          ),
+        ],
+        components: [accessButtons()],
       });
       return;
     }
-    if (n === "alerts") {
-      u.linked = true;
-      const ch = i.options.getChannel("channel", true);
-      u.alert = ch.id;
-      await i.editReply({ embeds: [emb("Saved", "Deals go to <#" + ch.id + ">\n\nNext: /monitor query:nike dunk 42", COL.ok)] });
-      return;
-    }
-    if (n === "monitor") {
-      u.linked = true;
-      const p = plan(u.plan);
-      const q = i.options.getString("query");
-      const act = i.options.getString("action");
-      const id = i.options.getString("id");
-      if (q && !act) {
-        if (u.monitors.length >= p.max) {
-          await i.editReply({ embeds: [emb("Limit reached", "Tap Unlimited test on /start", COL.e)], components: [btns()] });
-          return;
-        }
-        const mid = "m_" + Math.random().toString(36).slice(2, 8);
-        u.monitors.push({ id: mid, query: q.trim(), paused: false });
-        await i.editReply({ embeds: [emb("Watching", "**" + q.trim() + "**\nID: `" + mid + "`\n\n" + (u.alert ? "Try /demoalert" : "Set /alerts first"), COL.ok)] });
-        return;
-      }
-      const a = act || "list";
-      if (a === "list") {
-        if (!u.monitors.length) {
-          await i.editReply({ embeds: [emb("Empty", "Add one: /monitor query:nike dunk 42")] });
-          return;
-        }
-        const lines = u.monitors.map(m => "• `" + m.id + "` " + m.query + (m.paused ? " (paused)" : ""));
-        await i.editReply({ embeds: [emb("Monitors", lines.join("\n"))] });
-        return;
-      }
-      if (!id) {
-        await i.editReply({ embeds: [emb("Need ID", "Use /monitor action:List first", COL.w)] });
-        return;
-      }
-      const idx = u.monitors.findIndex(m => m.id === id);
-      if (idx < 0) {
-        await i.editReply({ embeds: [emb("Not found", "Unknown id", COL.e)] });
-        return;
-      }
-      if (a === "delete") {
-        u.monitors.splice(idx, 1);
-        await i.editReply({ embeds: [emb("Removed", "Deleted `" + id + "`", COL.ok)] });
-        return;
-      }
-      u.monitors[idx].paused = a === "pause";
-      await i.editReply({ embeds: [emb(a === "pause" ? "Paused" : "Resumed", "`" + id + "` updated", COL.ok)] });
-      return;
-    }
-    if (n === "demoalert") {
-      if (!u.alert) {
-        await i.editReply({ embeds: [emb("No channel", "Run /alerts first", COL.w)] });
-        return;
-      }
-      const ch = await client.channels.fetch(u.alert).catch(() => null);
-      if (!ch || !ch.isTextBased || !ch.isTextBased()) {
-        await i.editReply({ embeds: [emb("Can't post", "Need Send Messages + Embed Links", COL.e)] });
-        return;
-      }
-      await ch.send({
-        embeds: [new EmbedBuilder().setColor(COL.ok).setTitle("New deal — Nike Dunk Low")
-          .setDescription("**45 EUR** · Size **42**\nNike · Berlin\n\n[Open](https://www.vinted.fr)\n\n_Sample from Resell Buddy_")
-          .setTimestamp()],
+
+    await interaction.editReply({
+      embeds: [
+        embed(
+          "Welcome to Resell Buddy",
+          "Resell Buddy is a paid-only Vinted monitoring service.\n\n1. Sign in to the dashboard with Discord.\n2. Subscribe to Premium through Whop.\n3. Create monitors in the dashboard or with the Resell Buddy monitor commands.\n4. Receive new-listing alerts in your selected channels.",
+        ),
+      ],
+      components: [accessButtons()],
+    });
+  } catch (error) {
+    console.error(error);
+    try {
+      await interaction.editReply({
+        content: "Something went wrong. Try /start again.",
       });
-      await i.editReply({ embeds: [emb("Sent", "Posted in <#" + u.alert + ">", COL.ok)] });
-      return;
-    }
-    if (n === "subscribe") {
-      await i.editReply({
-        embeds: [emb("Get access", "One plan: 22.99 EUR per month.\nFull access. Cancel anytime.")],
-        components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setLabel("Pay 22.99 EUR/mo").setStyle(ButtonStyle.Link).setURL(WHOP)
-        )],
-      });
-      return;
-    }
-    await i.editReply({ content: "Try /start" });
-  } catch (err) {
-    console.error(err);
-    try { await i.editReply({ content: "Error — try /start" }); } catch {}
+    } catch {}
   }
 });
 
-client.once(Events.ClientReady, async (c) => {
-  console.log("ONLINE as " + c.user.tag);
-  c.user.setActivity("/start · Resell Buddy", { type: 3 });
-  try {
-    const app = await c.application.fetch();
-    if (app.owner && app.owner.id) owners.add(app.owner.id);
-  } catch {}
+client.once(Events.ClientReady, (readyClient) => {
+  console.log(`ONLINE as ${readyClient.user.tag}`);
+  readyClient.user.setActivity("/start · Premium access", { type: 3 });
 });
 
 const rest = new REST({ version: "10" }).setToken(token);
 await rest.put(Routes.applicationCommands(clientId), { body: commands });
-if (GUILD_ID) await rest.put(Routes.applicationGuildCommands(clientId, GUILD_ID), { body: commands });
+if (guildId) {
+  await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+    body: commands,
+  });
+}
 console.log("commands registered");
 await client.login(token);

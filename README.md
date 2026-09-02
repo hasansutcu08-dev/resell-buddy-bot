@@ -1,6 +1,7 @@
 # Resell Buddy — Discord Bot
 
-Always-on slash commands for testing (no payment required).
+Always-on Resell Buddy membership and setup commands. The hosted product is
+paid-only and requires an active Premium subscription.
 
 ## Deploy on Railway (recommended)
 
@@ -27,5 +28,4 @@ npm start
 
 ## Commands
 
-`/ping` `/help` `/link` `/claimowner` `/status`  
-`/monitor create|list|delete` `/alerts` `/demoalert` `/subscribe`
+`/start` `/setup` `/help` `/howto` `/status` `/subscribe` `/ping`
